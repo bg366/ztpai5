@@ -1,19 +1,14 @@
+const { noopEventBus } = require('../../events/eventBus');
 const { BusinessRuleError, ConflictError, NotFoundError, ForbiddenError } = require("../../errors/AppError");
 
 const MINUTE = 60 * 1000;
 const MIN_DURATION = 15 * MINUTE;
 const MAX_DURATION = 8 * 60 * MINUTE;
 
-// Dozwolone przejścia statusów; CANCELLED jest stanem końcowym.
-const STATUS_TRANSITIONS = {
-  CONFIRMED: ["CANCELLED"],
-  CANCELLED: [],
-};
-
 // Przedziały półotwarte [start, end): stykające się rezerwacje się nie nakładają.
 const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 
-function createReservationsService({ reservationsRepository, roomsRepository, now = () => new Date(), runInTransaction }) {
+function createReservationsService({ reservationsRepository, roomsRepository, now = () => new Date(), runInTransaction, eventBus = noopEventBus }) {
   async function getById(id, currentUser) {
     const reservation = await reservationsRepository.findById(id);
     if (!reservation || (currentUser.role !== 'ADMIN' && reservation.userId !== currentUser.id)) {
@@ -22,14 +17,11 @@ function createReservationsService({ reservationsRepository, roomsRepository, no
     return reservation;
   }
 
-  async function changeStatus(reservation, status, changes) {
-    if (!STATUS_TRANSITIONS[reservation.status].includes(status)) {
-      throw new ConflictError(
-        "INVALID_STATUS_TRANSITION",
-        `Cannot change status from ${reservation.status} to ${status}`,
-      );
-    }
-    return reservationsRepository.update(reservation.id, { status, ...changes });
+  function publishCreated(reservation) {
+    eventBus.publish('reservation.created', {
+      reservationId: reservation.id, roomId: reservation.roomId, userId: reservation.userId,
+      startTime: reservation.startTime.toISOString(), endTime: reservation.endTime.toISOString(),
+    });
   }
 
   return {
@@ -45,10 +37,12 @@ function createReservationsService({ reservationsRepository, roomsRepository, no
 
     async create(input, currentUser) {
       if (runInTransaction) {
-        return runInTransaction(async repositories => {
+        const reservation = await runInTransaction(async repositories => {
           await repositories.roomsRepository.lockById(input.roomId);
           return createReservationsService({ ...repositories, now }).create(input, currentUser);
         });
+        publishCreated(reservation);
+        return reservation;
       }
       const currentTime = now();
       const start = new Date(input.startTime).getTime();
@@ -92,7 +86,7 @@ function createReservationsService({ reservationsRepository, roomsRepository, no
         );
       }
 
-      return reservationsRepository.create({
+      const reservation = await reservationsRepository.create({
         roomId: room.id,
         userId: currentUser.id,
         participants: input.participants,
@@ -102,21 +96,36 @@ function createReservationsService({ reservationsRepository, roomsRepository, no
         createdAt: currentTime,
         cancelledAt: null,
       });
+      publishCreated(reservation);
+      return reservation;
     },
 
     async cancel(id, currentUser) {
-      const reservation = await getById(id, currentUser);
-
-      // Ponowne anulowanie jest idempotentne: zwracamy rezerwację bez zmian.
-      if (reservation.status === "CANCELLED") {
-        return reservation;
+      const change = async repositories => {
+        await repositories.reservationsRepository.lockById(id);
+        const service = createReservationsService({ ...repositories, now });
+        const reservation = await service.getById(id, currentUser);
+        if (reservation.status === 'CANCELLED') return { reservation, changed: false };
+        const currentTime = now();
+        if (reservation.startTime.getTime() <= currentTime.getTime()) {
+          throw new ConflictError('RESERVATION_ALREADY_STARTED', 'Reservation has already started');
+        }
+        const updated = await repositories.reservationsRepository.update(id, {
+          status: 'CANCELLED', cancelledAt: currentTime,
+        });
+        return { reservation: updated, changed: true };
+      };
+      const result = runInTransaction
+        ? await runInTransaction(change)
+        : await change({ reservationsRepository, roomsRepository });
+      // runInTransaction rozwiązuje Promise dopiero po COMMIT.
+      if (result.changed) {
+        eventBus.publish('reservation.cancelled', {
+          reservationId: id, roomId: result.reservation.roomId,
+          userId: result.reservation.userId, cancelledBy: currentUser.id,
+        });
       }
-
-      const currentTime = now();
-      if (reservation.startTime.getTime() <= currentTime.getTime()) {
-        throw new ConflictError("RESERVATION_ALREADY_STARTED", "Reservation has already started");
-      }
-      return changeStatus(reservation, "CANCELLED", { cancelledAt: currentTime });
+      return result.reservation;
     },
   };
 }

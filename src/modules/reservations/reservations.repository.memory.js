@@ -8,6 +8,7 @@ function createReservationsRepository(state) {
     (buildingId===undefined||state.rooms.find(s=>s.id===r.roomId).buildingId===buildingId)&&
     (!from||r.endTime>new Date(from))&&(!to||r.startTime<new Date(to)));
   return {
+    async lockById() {},
     async findAll(filters={}) {return filter(filters).map(map);},
     async findPage({page=1,limit=20,sort='startTime',...filters}={}) {
       const key=sort.replace(/^-/,''),direction=sort.startsWith('-')?-1:1;

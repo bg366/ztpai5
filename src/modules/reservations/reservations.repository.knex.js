@@ -23,6 +23,7 @@ function createReservationsRepository(db) {
     return q;
   }
   return {
+    async lockById(id) { await db('reservations').where({ id }).forUpdate().first(); },
     async findAll(filters = {}) { return (await select(filtered(filters)).orderBy('r.id')).map(map); },
     async findPage({ page = 1, limit = 20, sort = 'startTime', ...filters } = {}) {
       const descending = sort.startsWith('-');
