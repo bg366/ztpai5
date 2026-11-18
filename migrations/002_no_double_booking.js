@@ -1,0 +1,11 @@
+exports.up = async knex => {
+  await knex.raw('CREATE EXTENSION IF NOT EXISTS btree_gist');
+  await knex.raw(`ALTER TABLE reservations
+    ADD CONSTRAINT reservations_no_overlap EXCLUDE USING gist (
+      room_id WITH =, tstzrange(start_time, end_time, '[)') WITH &&
+    ) WHERE (status = 'CONFIRMED')`);
+};
+exports.down = async knex => {
+  await knex.raw('ALTER TABLE reservations DROP CONSTRAINT reservations_no_overlap');
+  // Rozszerzenie może być używane przez inne obiekty w tej bazie.
+};
