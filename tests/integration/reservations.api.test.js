@@ -6,7 +6,7 @@ if (!process.env.TEST_DATABASE_URL) throw new Error('Ustaw TEST_DATABASE_URL prz
 const config = require('../../src/config');
 const { buildApplication } = require('../../src/bootstrap');
 const db = knex(require('../../knexfile'));
-const logger = { log: jest.fn(), error: jest.fn() };
+const logger = { info: jest.fn(), log: jest.fn(), error: jest.fn() };
 // buildApplication składa zależności i wywołuje createApp(), bez app.listen().
 const { app, eventBus } = buildApplication({ db, logger, now: () => new Date('2030-01-01T08:00:00Z') });
 const password = 'test-password-123';
