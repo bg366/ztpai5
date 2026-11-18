@@ -6,4 +6,4 @@ COPY . .
 ENV NODE_ENV=production
 USER node
 EXPOSE 3000
-CMD ["sh", "-c", "npx knex migrate:latest && exec node src/server.js"]
+CMD ["node", "src/start.js"]
