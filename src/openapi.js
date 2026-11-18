@@ -43,7 +43,17 @@ function operation(tag, summary, schema, { status = 200, errors = [], body, exam
 }
 const id = { name: 'id', in: 'path', required: true, schema: integer };
 const reservationExample = { roomId: 1, participants: 5, startTime: '2099-12-10T10:00:00Z', endTime: '2099-12-10T11:00:00Z' };
+schemas.AuditEntry = object({ id: integer, eventType: { type: 'string', enum: ['reservation.created', 'reservation.cancelled'] }, payload: { type: 'object', additionalProperties: true }, createdAt: date });
+schemas.AuditPage = object({ data: array(ref('AuditEntry')), meta: schemas.ReservationPage.properties.meta });
 const paths = {
+  '/health': { get: operation('Docs', 'Stan procesu API', object({ status: text }), { publicRoute: true }) },
+  '/api/admin/audit-log': { get: operation('Audit', 'Audit log (ADMIN), od najnowszych wpisów', ref('AuditPage'), {
+    errors: [400, 403], parameters: [
+      { name: 'page', in: 'query', schema: { ...integer, default: 1 } },
+      { name: 'limit', in: 'query', schema: { type: 'integer', minimum: 1, maximum: 100, default: 20 } },
+      { name: 'eventType', in: 'query', schema: { type: 'string', enum: ['reservation.created', 'reservation.cancelled'] } },
+    ],
+  }) },
   '/api/auth/register': { post: operation('Auth', 'Rejestracja konta USER', ref('User'), { status: 201, publicRoute: true, errors: [409], body: 'Register', example: { email: 'Piotr@example.com', password: 'bardzo-dlugie-haslo' } }) },
   '/api/auth/login': { post: operation('Auth', 'Logowanie i token JWT', ref('Token'), { publicRoute: true, errors: [401], body: 'Login', example: { email: 'jan@example.com', password: 'user-password-123' } }) },
   '/api/auth/me': { get: operation('Auth', 'Dane zalogowanego użytkownika', ref('User')) },
@@ -82,7 +92,7 @@ for (const [plural, model, example] of [
 module.exports = {
   openapi: '3.0.3', info: { title: 'Room Booking API - lab5', version: '5.0.0', description: 'Rejestracja, JWT i prywatne rezerwacje. Zaloguj się, skopiuj accessToken i użyj Authorize. Dane przykładowe dotyczą wyłącznie lokalnego laboratorium.' },
   servers: [{ url: '/' }],
-  tags: ['Auth', 'Buildings', 'Rooms', 'Reservations', 'Docs', 'Debug'].map(name => ({ name })),
+  tags: ['Auth', 'Buildings', 'Rooms', 'Reservations', 'Audit', 'Docs', 'Debug'].map(name => ({ name })),
   security: [{ bearerAuth: [] }],
   components: { securitySchemes: { bearerAuth: { type: 'http', scheme: 'bearer', bearerFormat: 'JWT', description: 'Wklej sam accessToken (bez prefiksu Bearer).' } }, schemas },
   paths,

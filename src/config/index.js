@@ -12,14 +12,13 @@ const password = z.string().min(10).max(72)
   .refine(value => Buffer.byteLength(value, 'utf8') <= 72, 'Maximum 72 UTF-8 bytes');
 const schema = z.object({
   NODE_ENV: z.enum(['development', 'test', 'production']).default('development'),
-  PORT: z.coerce.number().int().min(1).max(65535).default(3004),
+  PORT: z.coerce.number().int().min(1).max(65535).default(3005),
   DATABASE_URL: databaseUrl,
   TEST_DATABASE_URL: databaseUrl.optional(),
   JWT_SECRET: z.string().min(32, 'JWT_SECRET must have at least 32 characters'),
   JWT_EXPIRES_IN: z.string().regex(/^[1-9]\d{0,5}[smhd]$/, 'Use a positive duration such as 15m or 10s').default('15m'),
-  SEED_ADMIN_PASSWORD: password,
-  SEED_USER_PASSWORD: password,
-  REPOSITORY: z.enum(['knex', 'memory']).default('knex'),
+  SEED_ADMIN_PASSWORD: password.optional(),
+  SEED_USER_PASSWORD: password.optional(),
 });
 const result = schema.safeParse(process.env);
 if (!result.success) {

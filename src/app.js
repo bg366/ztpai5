@@ -1,3 +1,4 @@
+const { createAuditRouter } = require('./modules/audit/audit.routes');
 const express = require('express');
 const swaggerUi = require('swagger-ui-express');
 const openapi = require('./openapi');
@@ -12,10 +13,11 @@ const { createRoomsRouter } = require('./modules/rooms/rooms.routes');
 const { createReservationsRouter } = require('./modules/reservations/reservations.routes');
 const { createDebugRouter } = require('./modules/debug/debug.routes');
 
-function createApp({ authService, jwtSecret, buildingsService, roomsService, reservationsService, logger = console }) {
+function createApp({ authService, jwtSecret, buildingsService, roomsService, reservationsService, auditRepository, logger = console }) {
   const app = express();
   app.disable('x-powered-by');
   app.use(requestLogger(logger));
+  app.get('/health', (req, res) => res.json({ status: 'ok' }));
   app.get('/api/docs/openapi.json', (req, res) => res.json(openapi));
   app.use('/api/docs', swaggerUi.serve, swaggerUi.setup(openapi, {
     customSiteTitle: 'Room Booking API - lab5',
@@ -35,6 +37,7 @@ function createApp({ authService, jwtSecret, buildingsService, roomsService, res
   app.use('/api/buildings', createBuildingsRouter(buildingsService));
   app.use('/api/rooms', createRoomsRouter(roomsService));
   app.use('/api/reservations', createReservationsRouter(reservationsService));
+  app.use('/api/admin/audit-log', authorize('ADMIN'), createAuditRouter(auditRepository));
   app.use('/api/debug', authorize('ADMIN'), createDebugRouter());
   app.use(notFoundHandler);
   app.use(errorHandler(logger));
