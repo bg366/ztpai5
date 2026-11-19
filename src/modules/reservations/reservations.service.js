@@ -6,7 +6,7 @@ const MIN_DURATION = 15 * MINUTE;
 const MAX_DURATION = 8 * 60 * MINUTE;
 
 // Przedziały półotwarte [start, end): stykające się rezerwacje się nie nakładają.
-const overlaps = (a, b) => a.start <= b.end && b.start <= a.end;
+const overlaps = (a, b) => a.start < b.end && b.start < a.end;
 
 function createReservationsService({ reservationsRepository, roomsRepository, now = () => new Date(), runInTransaction, eventBus = noopEventBus }) {
   async function getById(id, currentUser) {
